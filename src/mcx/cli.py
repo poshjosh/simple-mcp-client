@@ -41,7 +41,10 @@ def to_dict(items: List[str]) ->  Dict[str, str]:
     result = {}
     for item in items:
         if '=' not in item:
-            raise ValueError(f"Invalid format for env, with value: '{item}'. Expected env='key=value'.")
+            raise ValueError(f"Invalid format for: '{item}'. Expected 'key=value'.")
+        key, value = item.split('=', 1)
+        print(f"Item: {item}, Key: {key}, Value: {value}")
+        result[key] = value
     return result
 
 @dataclass(frozen=True)
@@ -118,9 +121,11 @@ async def list() -> None:
 
 @cli.command()
 @click.argument("tool_name")
+@click.option("-a", "--arg", type=str, help="An argument to pass to the MCP server tool call", multiple=True)
 @click.option("--retries", "-r", default=0, help="Number of retries")
 async def call(
         tool_name: str,
+        arg: List[str],
         retries: int = 0,
 ) -> None:
     """Call a tool on the current MCP server"""
@@ -137,7 +142,9 @@ async def call(
 
         await client.connect(mcp_server_config.cmd, mcp_server_config.arg, mcp_server_config.env)
 
-        console.print(f"[cyan]<{mcp_server_config.id}> Calling tool:[/cyan] {tool_name}")
+        arguments = to_dict(arg) if arg else {}
+
+        console.print(f"[cyan]<{mcp_server_config.id}> Calling tool: {tool_name} with args: {arguments}[/cyan]")
 
         with Progress(
                 SpinnerColumn(),
@@ -146,7 +153,7 @@ async def call(
         ) as progress:
             task = progress.add_task(f"<{mcp_server_config.id}> Calling tool... ", total=None)
 
-            tool_call_result = await client.call_tool(tool_name, retry=retries)
+            tool_call_result = await client.call_tool(tool_name, arguments, retry=retries)
             console.print(f"<{mcp_server_config.id}> {tool_call_result}")
 
             progress.remove_task(task)

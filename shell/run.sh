@@ -19,4 +19,10 @@ mcx use aideas --cmd=docker \
 
 mcx list
 
-mcx call "list_agents"
+mcx call list_agents
+
+mcx call get_agent_config --arg='agent_name=test-agent'
+
+#mcx call create_automation_task --arg='agents=test-agent,test-log type=list'
+#mcx call create_automation_task --arg='agents=k=v,k1=v1 type=dict'
+
