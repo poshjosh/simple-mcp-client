@@ -43,7 +43,11 @@ def to_dict(items: List[str]) ->  Dict[str, str]:
         if '=' not in item:
             raise ValueError(f"Invalid format for: '{item}'. Expected 'key=value'.")
         key, value = item.split('=', 1)
-        print(f"Item: {item}, Key: {key}, Value: {value}")
+        if key in result:
+            existing = result[key]
+            arr = existing if isinstance(existing, List) else [existing]
+            arr.append(value)
+            value = arr
         result[key] = value
     return result
 
@@ -85,9 +89,11 @@ async def use(mcp_server_id: str, cmd: str, arg: List[str], env: List[str]) -> N
         env=to_dict(env)
     )
     await asyncio.to_thread(write_config_to_file, mcp_server_config)
+    console.print(Panel(f"✅ Using <{mcp_server_config.id}> MCP Server!", style="green"))
     
 @cli.command()
-async def list() -> None:
+@click.option("-f", "--fmt", type=str, help="The format to apply to the output from the list command")
+async def list(fmt: str = None) -> None:
     """List the available tools for the current MCP server"""
     mcp_server_config: Union[MCPServerConfig, None] = None
     client = MCPClient()
@@ -105,6 +111,9 @@ async def list() -> None:
         console.print(f"[cyan]<{mcp_server_config.id}> Listing tools:[/cyan]")
 
         tool_call_result = await client.list_tools()
+        if fmt:
+            from .output_formatter import format_dict_safe
+            tool_call_result = format_dict_safe(fmt, tool_call_result, json.dumps(tool_call_result, indent=2))
         console.print(f"<{mcp_server_config.id}> {tool_call_result}")
 
         console.print(Panel(f"✅ <{mcp_server_config.id}> Listing tools succeeded!", style="green"))
@@ -122,11 +131,13 @@ async def list() -> None:
 @cli.command()
 @click.argument("tool_name")
 @click.option("-a", "--arg", type=str, help="An argument to pass to the MCP server tool call", multiple=True)
-@click.option("--retries", "-r", default=0, help="Number of retries")
+@click.option("-r", "--retries", default=0, help="Number of retries")
+@click.option("-f", "--fmt", type=str, help="The format to apply to the output from the tool call")
 async def call(
         tool_name: str,
         arg: List[str],
         retries: int = 0,
+        fmt: str = None
 ) -> None:
     """Call a tool on the current MCP server"""
     mcp_server_config: Union[MCPServerConfig, None] = None
@@ -154,6 +165,9 @@ async def call(
             task = progress.add_task(f"<{mcp_server_config.id}> Calling tool... ", total=None)
 
             tool_call_result = await client.call_tool(tool_name, arguments, retry=retries)
+            if fmt:
+                from .output_formatter import format_dict_safe
+                tool_call_result = format_dict_safe(fmt, tool_call_result, json.dumps(tool_call_result, indent=2))
             console.print(f"<{mcp_server_config.id}> {tool_call_result}")
 
             progress.remove_task(task)

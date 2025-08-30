@@ -46,7 +46,13 @@ mcx use automate-ideas-to-social --cmd=docker \
 ### mcx call (call a tool on the selected mcp server)
 
 ```shell
-mcx call list_agents
+mcx call list_agents --fmt='content[0].text'
+```
+
+### mcx list (list all tools on the selected mcp server)
+
+```shell
+mcx list --fmt='tools[*].name'
 ```
 
 ## Development

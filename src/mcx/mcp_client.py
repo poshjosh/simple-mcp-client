@@ -96,6 +96,7 @@ class MCPServerResponseParser:
         async for response_line in source:
             response_line = response_line.decode(encoding).strip()
             response_dict = MCPServerResponseParser._parse_response(response_line)
+            is_response = False if response_dict is None else response_dict.get("result", None) or response_dict.get("error", None)
             error = self.__error_resolver.resolve_str(response_line) \
                 if response_dict is None else self.__error_resolver.resolve_dict(response_dict)
             if error:
@@ -104,7 +105,7 @@ class MCPServerResponseParser:
 
             # self.process.stdout.at_eof() did not work as expected here,
             # so we break when we see a JSON line with the expected result format.
-            if response_dict is not None:
+            if is_response:
                 if error:
                     error_response = error
                 else:
@@ -126,7 +127,7 @@ class MCPServerResponseParser:
             return None
         if not json_dict or not isinstance(json_dict, dict):
             return None
-        return json_dict if json_dict.get("result", None) or json_dict.get("error", None) else None
+        return json_dict
 
 
 class RetryBelowLimit:
@@ -276,7 +277,7 @@ class MCPClient:
 
         response = await self._send_message(init_message)
         self.capabilities = response.get("result", {}).get("capabilities", {})
-        logger.info(f"Server capabilities: {self.capabilities}")
+        logger.debug(f"Server capabilities: {self.capabilities}")
 
         # Send initialized notification
         initialized_message = MCPMessage(
@@ -357,7 +358,6 @@ class MCPClient:
         return str(self.request_id)
 
 async def _example_usage():
-    # Set up logging
     logging.basicConfig(level=logging.INFO)
 
     """Example usage of the MCP client"""

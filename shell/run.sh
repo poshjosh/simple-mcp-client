@@ -17,12 +17,13 @@ mcx use aideas --cmd=docker \
   --arg="-e" --arg="USER_HOME=/Users/chinomso" \
   --arg="poshjosh/aideas-mcp:0.0.1"
 
-mcx list
+mcx list --fmt='tools[*].name'
 
-mcx call list_agents
+mcx call list_agents --fmt='content[0].text'
 
-mcx call get_agent_config --arg='agent_name=test-agent'
+mcx call get_agent_config --arg='agent_name=test-agent'  --fmt='content[0].text'
 
-#mcx call create_automation_task --arg='agents=test-agent,test-log type=list'
-#mcx call create_automation_task --arg='agents=k=v,k1=v1 type=dict'
-
+mcx call create_automation_task \
+  --arg='agents=test-agent' \
+  --arg='agents=test-log' \
+  --fmt='content[0].text'
