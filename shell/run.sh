@@ -17,4 +17,6 @@ mcx use aideas --cmd=docker \
   --arg="-e" --arg="USER_HOME=/Users/chinomso" \
   --arg="poshjosh/aideas-mcp:0.0.1"
 
+mcx list
+
 mcx call "list_agents"

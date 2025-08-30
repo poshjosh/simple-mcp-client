@@ -37,10 +37,6 @@ class ConnectionFailedError(MCPClientError):
     def __init__(self, *args):
         super().__init__(*args)
 
-class ConnectionClosedError(MCPClientError):
-    def __init__(self, *args):
-        super().__init__(*args)
-
 class MCPServerError(MCPClientError):
     def __init__(self, *args):
         super().__init__(*args)
@@ -64,16 +60,6 @@ class MCPMessage:
 
 
 class ErrorResolver:
-    def resolve_str(self, _: str) -> Optional[MCPServerError]:
-        return None
-
-    def resolve_dict(self, response: Dict[str, Any]) -> Optional[MCPServerError]:
-        if "error" in response:
-            error = response["error"]
-            return MCPServerError(error.get('message', 'Unexpected error'), error)
-        return None
-
-class ErrorResolverStdOut(ErrorResolver):
     def resolve_str(self, text: str) -> Optional[MCPServerError]:
         if not text:
             return None
@@ -95,7 +81,7 @@ class MCPServerResponse:
     error: Optional[MCPServerError] = None
 
 class MCPServerResponseParser:
-    def __init__(self, error_resolver: ErrorResolver = ErrorResolverStdOut()):
+    def __init__(self, error_resolver: ErrorResolver = ErrorResolver()):
         self.__error_resolver = error_resolver
 
     async def parse(self, source: asyncio.StreamReader, encoding: str) -> MCPServerResponse:
@@ -317,16 +303,13 @@ class MCPClient:
 
         response_text = '\n'.join(response.lines)
 
-        if not response.lines:
-            logger.error(f"Raw response:\n{response_text}")
-            raise ConnectionClosedError()
-        elif response.error:
+        if response.error:
             logger.error(f"Raw response:\n{response_text}")
             raise response.error
         elif response.errors:
             logger.error(f"Raw response:\n{response_text}")
             raise MCPServerError(f"Response contained {len(response.errors)} errors, see logs for details.")
-        elif not response.success:
+        elif not response.lines or not response.success:
             logger.error(f"Raw response:\n{response_text}")
             raise MCPServerDidNotRespondError()
         else:
@@ -360,9 +343,13 @@ class MCPClient:
 
     async def _terminate_process_and_set_to_none(self):
         if self.process:
-            self.process.terminate()
-            await self.process.wait()
-            self.process = None
+            try :
+                self.process.terminate()
+                await self.process.wait()
+            except Exception as exc:
+                logger.debug("Failed to terminate MCPClient process", exc_info=exc)
+            finally:
+                self.process = None
 
     def _next_id(self) -> str:
         """Generate next request ID"""

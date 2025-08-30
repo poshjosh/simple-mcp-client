@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Dict, Optional, Union, Any, Callable, Coroutine
 
 import click
 from rich.console import Console
@@ -76,12 +76,45 @@ def read_config_from_file() -> Union[MCPServerConfig, None]:
 async def use(mcp_server_id: str, cmd: str, arg: List[str], env: List[str]) -> None:
     """Use a server"""
     mcp_server_config = MCPServerConfig(
-        id=mcp_server_id,
+        id=mcp_server_id if mcp_server_id else "mcp-server",
         cmd=cmd,
         arg=arg,
         env=to_dict(env)
     )
     await asyncio.to_thread(write_config_to_file, mcp_server_config)
+    
+@cli.command()
+async def list() -> None:
+    """List the available tools for the current MCP server"""
+    mcp_server_config: Union[MCPServerConfig, None] = None
+    client = MCPClient()
+    try:
+
+        mcp_server_config: Union[MCPServerConfig, None] = await asyncio.to_thread(read_config_from_file)
+        if not mcp_server_config:
+            console.print(Panel("❌ No MCP server selected. Please use the 'use' command first.", style="red"))
+            sys.exit(1)
+
+        console.print(f"[dim]<{mcp_server_config.id}> Connecting... [/dim]")
+
+        await client.connect(mcp_server_config.cmd, mcp_server_config.arg, mcp_server_config.env)
+
+        console.print(f"[cyan]<{mcp_server_config.id}> Listing tools:[/cyan]")
+
+        tool_call_result = await client.list_tools()
+        console.print(f"<{mcp_server_config.id}> {tool_call_result}")
+
+        console.print(Panel(f"✅ <{mcp_server_config.id}> Listing tools succeeded!", style="green"))
+    except Exception as exc:
+        logger.debug("", exc_info=exc)
+        mcp_server_id = mcp_server_config.id if mcp_server_config else ""
+        console.print(Panel(f"❌ <{mcp_server_id}> Listing tools failed: {exc}", style="red"))
+    finally:
+        try :
+            if client.is_connected():
+                await client.disconnect()
+        finally:
+            sys.exit(1)
 
 @cli.command()
 @click.argument("tool_name")
@@ -90,8 +123,9 @@ async def call(
         tool_name: str,
         retries: int = 0,
 ) -> None:
-    """Call a tool"""
+    """Call a tool on the current MCP server"""
     mcp_server_config: Union[MCPServerConfig, None] = None
+    client = MCPClient()
     try:
         
         mcp_server_config: Union[MCPServerConfig, None] = await asyncio.to_thread(read_config_from_file)
@@ -99,32 +133,35 @@ async def call(
             console.print(Panel("❌ No MCP server selected. Please use the 'use' command first.", style="red"))
             sys.exit(1)
 
-        client = MCPClient()
-
-        console.print(f"[dim]{mcp_server_config.id} Connecting... [/dim]")
+        console.print(f"[dim]<{mcp_server_config.id}> Connecting... [/dim]")
 
         await client.connect(mcp_server_config.cmd, mcp_server_config.arg, mcp_server_config.env)
 
-        console.print(f"[cyan]{mcp_server_config.id} Calling tool:[/cyan] {tool_name}")
+        console.print(f"[cyan]<{mcp_server_config.id}> Calling tool:[/cyan] {tool_name}")
 
         with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console
         ) as progress:
-            task = progress.add_task(f"{mcp_server_config.id} Calling tool... ", total=None)
+            task = progress.add_task(f"<{mcp_server_config.id}> Calling tool... ", total=None)
 
             tool_call_result = await client.call_tool(tool_name, retry=retries)
-            console.print(f"{mcp_server_config.id} {tool_call_result}")
+            console.print(f"<{mcp_server_config.id}> {tool_call_result}")
 
             progress.remove_task(task)
 
-        console.print(Panel(f"✅ {mcp_server_config.id} Tool call succeeded!", style="green"))
+        console.print(Panel(f"✅ <{mcp_server_config.id}> Tool call succeeded!", style="green"))
     except Exception as exc:
         logger.debug("", exc_info=exc)
         mcp_server_id = mcp_server_config.id if mcp_server_config else ""
-        console.print(Panel(f"❌ {mcp_server_id} Tool call failed: {exc}", style="red"))
-        sys.exit(1)
+        console.print(Panel(f"❌ <{mcp_server_id}> Tool call failed: {exc}", style="red"))
+    finally:
+        try :
+            if client.is_connected():
+                await client.disconnect()
+        finally:    
+            sys.exit(1)
 
 
 def main() -> None:
@@ -136,7 +173,7 @@ def main() -> None:
         return wrapper
 
     # Apply async wrapper to commands
-    for command in [use, call]:
+    for command in [use, list, call]:
         command.callback = async_command(command.callback)
 
     cli()
