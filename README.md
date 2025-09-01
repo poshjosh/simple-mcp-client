@@ -4,7 +4,11 @@ A simple Model Context Protocol (MCP) client for working with MCP servers.
 
 ## Usage
 
+### Setup
+
 - Install by running [this script](./shell/install.sh).
+- Activate by running `source .venv/bin/activate || exit 1` in the project root directory.
+- Get help by running `mcx --help` from the same shell where you activated the project.
 
 ### mcx use (select an mcp server)
 
