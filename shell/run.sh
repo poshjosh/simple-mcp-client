@@ -27,3 +27,15 @@ mcx call create_automation_task \
   --arg='agents=test-agent' \
   --arg='agents=test-log' \
   --fmt='content[0].text'
+
+#mcx call create_automation_task \
+#  --arg='agents=test-log' \
+#  --arg='agents=twitter' \
+#  --arg='text-content=Rest is for the assured' \
+#  --fmt='content[0].text'
+
+#mcx call get_task_status \
+#  --arg='task_id=634a346b921442dcaa85b93c5fcb1cde' \
+#  --fmt='content[0].text'
+
+mcx quit
