@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def setup_logging(verbose: bool = False) -> None:
     """Setup logging configuration."""
-    level = logging.DEBUG if verbose else logging.INFO
+    level = logging.DEBUG if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -59,15 +59,15 @@ async def list(fmt: str = None, quit: bool = False) -> None:
     """List the available tools for the current MCP server"""
     client = MCPClient()
     try:
-        name = "list"
-        async def _list_tool(mcp_server_config: MCPServerConfig):
+        async def _list(mcp_server_config: MCPServerConfig):
             tool_call_result = await client.list_tools()
             if tool_call_result and fmt:
                 from .output_formatter import format_dict_safe
                 tool_call_result = format_dict_safe(fmt, tool_call_result, json.dumps(tool_call_result, indent=2))
-            console.print(f"<{mcp_server_config.id}> {tool_call_result}")
+            _print_if_debug(f"<{mcp_server_config.id}>")
+            console.print(json.dumps(tool_call_result))
 
-        await _execute(name, client, _list_tool)
+        await _execute(client, "list_tools", _list)
 
     finally:
         try :
@@ -92,17 +92,18 @@ async def call(
     """Call a tool on the current MCP server"""
     client = MCPClient()
     try:
-        name = f"call {tool_name}"
-        async def _call_tool(mcp_server_config: MCPServerConfig):
+        action_id = f"call_tool {tool_name}"
+        async def _call(mcp_server_config: MCPServerConfig):
             arguments = _to_dict(arg) if arg else {}
-            console.print(f"[cyan]<{mcp_server_config.id}> {name}, args: {arguments}[/cyan]")
+            _print_if_debug(f"[cyan]<{mcp_server_config.id}> {action_id}, args: {arguments}[/cyan]")
             tool_call_result = await client.call_tool(tool_name, arguments, retry=retries)
             if tool_call_result and fmt:
                 from .output_formatter import format_dict_safe
                 tool_call_result = format_dict_safe(fmt, tool_call_result, json.dumps(tool_call_result, indent=2))
-            console.print(f"<{mcp_server_config.id}> {tool_call_result}")
+            _print_if_debug(f"<{mcp_server_config.id}>")
+            console.print(json.dumps(tool_call_result))
 
-        await _execute(name, client, _call_tool)
+        await _execute(client, action_id, _call)
 
     finally:
         try :
@@ -114,11 +115,11 @@ async def call(
 @cli.command()
 async def quit() -> None:
     """Quit the current MCP server"""
+    client = MCPClient()
     try:
-        client = MCPClient()
-        def _quit(_):
-            return client.disconnect()
-        await _execute("Quit", client, _quit)
+        async def _quit(_):
+            return await client.disconnect()
+        await _execute(client,"quit", _quit)
     finally:
         sys.exit(1)
 
@@ -136,25 +137,25 @@ def _to_dict(items: List[str]) ->  Dict[str, str]:
         result[key] = value
     return result
 
-async def _execute(name: str, client: MCPClient, action: Callable[[MCPServerConfig], Coroutine[Any, Any, Any]]):
+async def _execute(client: MCPClient, action_id: str, action: Callable[[MCPServerConfig], Coroutine[Any, Any, Any]]):
     mcp_server_config: Optional[MCPServerConfig] = None
     try:
         mcp_server_config = await _require_mcp_server_config()
 
-        console.print(f"[dim]<{mcp_server_config.id}> Connecting... [/dim]")
+        _print_if_debug(f"[dim]<{mcp_server_config.id}> Connecting... [/dim]")
 
         await client.connect(mcp_server_config.cmd, mcp_server_config.arg, mcp_server_config.env)
 
-        console.print(f"[cyan]<{mcp_server_config.id}> {name}[/cyan]")
+        _print_if_debug(f"[cyan]<{mcp_server_config.id}> {action_id}[/cyan]")
 
-        await _with_progress(f"<{mcp_server_config.id}> ... please wait ", action, mcp_server_config)
+        await _with_progress(f"<{mcp_server_config.id}> ...please wait executing: {action_id} ", action, mcp_server_config)
 
-        console.print(Panel(f"✅ <{mcp_server_config.id}> {name} succeeded!", style="green"))
+        _print_if_debug(Panel(f"✅ <{mcp_server_config.id}> {action_id} succeeded!", style="green"))
 
     except Exception as exc:
         logger.debug("", exc_info=exc)
         mcp_server_id = mcp_server_config.id if mcp_server_config else ""
-        console.print(Panel(f"❌ <{mcp_server_id}> {name} failed: {exc}", style="red"))
+        console.print(Panel(f"❌ <{mcp_server_id}> {action_id} failed: {exc}", style="red"))
 
 async def _with_progress(description: str,
                          action: Callable[[MCPServerConfig], Coroutine[Any, Any, Any]],
@@ -176,6 +177,10 @@ async def _require_mcp_server_config() -> MCPServerConfig:
         console.print(Panel("❌ No MCP server selected. Please first use the 'use' command to select an MCP server.", style="red"))
         sys.exit(1)
     return mcp_server_config
+
+def _print_if_debug(message) -> None:
+    if logger.isEnabledFor(logging.DEBUG):
+        console.print(message)
 
 
 def main() -> None:
